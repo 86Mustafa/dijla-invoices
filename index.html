@@ -1,0 +1,1419 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>نظام إدارة وأرشفة الفواتير</title>
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="فواتير دجلة">
+  <link rel="icon" type="image/png" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Cairo -->
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <style>
+    body {
+      font-family: 'Cairo', sans-serif;
+      background-color: #f8fafc;
+    }
+
+    @page { size: A4; margin: 12mm; }
+
+    @media print {
+      * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      #printableArea tr { page-break-inside: avoid; }
+      #printableArea table { page-break-inside: auto; }
+      #printableArea section { page-break-inside: avoid; }
+      body * {
+        visibility: hidden;
+      }
+
+      #printableArea,
+      #printableArea * {
+        visibility: visible;
+      }
+
+      #printableArea {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+      }
+
+      .no-print {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+
+<body class="text-slate-800 antialiased min-h-screen flex flex-col">
+
+  <!-- Header -->
+  <header class="bg-slate-900 text-white shadow-lg sticky top-0 z-30 no-print">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3 space-x-reverse">
+        <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center shadow-md">
+          <i class="fa-solid fa-file-invoice-dollar text-xl"></i>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold">ادارة الفواتير/شركة دجلة</h1>
+          <p class="text-xs text-slate-400">إدارة المبيعات، التحصيلات، المردودات والاستحقاقات</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="installBtn" onclick="installApp()"
+          class="hidden px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 rounded-lg text-xs font-bold transition items-center gap-1.5">
+          <i class="fa-solid fa-mobile-screen-button"></i> تثبيت التطبيق
+        </button>
+        <button onclick="exportData()"
+          class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-semibold border border-slate-700 transition flex items-center gap-1.5">
+          <i class="fa-solid fa-download"></i> تصدير نسخة
+        </button>
+        <label
+          class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-semibold border border-slate-700 transition flex items-center gap-1.5 cursor-pointer">
+          <i class="fa-solid fa-upload"></i> استيراد
+          <input type="file" onchange="importData(event)" class="hidden" accept=".json">
+        </label>
+        <button onclick="openInvoiceModal()"
+          class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-bold shadow-md transition flex items-center gap-2">
+          <i class="fa-solid fa-plus"></i> فاتورة جديدة
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full space-y-6">
+
+    <!-- KPI Dashboard Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 no-print">
+      <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
+        <div>
+          <p class="text-xs font-semibold text-slate-500 mb-1">إجمالي الفواتير</p>
+          <h3 id="statTotalInvoices" class="text-2xl font-black text-slate-800">0</h3>
+        </div>
+        <div class="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600 text-xl">
+          <i class="fa-solid fa-layer-group"></i>
+        </div>
+      </div>
+
+      <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
+        <div>
+          <p class="text-xs font-semibold text-slate-500 mb-1">الفواتير المكتملة</p>
+          <h3 id="statCompletedInvoices" class="text-2xl font-black text-emerald-600">0</h3>
+        </div>
+        <div class="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600 text-xl">
+          <i class="fa-solid fa-circle-check"></i>
+        </div>
+      </div>
+
+      <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
+        <div>
+          <p class="text-xs font-semibold text-slate-500 mb-1">الفواتير المعلقة</p>
+          <h3 id="statPendingInvoices" class="text-2xl font-black text-amber-600">0</h3>
+        </div>
+        <div class="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600 text-xl">
+          <i class="fa-solid fa-clock-rotate-left"></i>
+        </div>
+      </div>
+
+      <!-- New: Overdue Invoices Alert Card -->
+      <div
+        class="bg-white p-5 rounded-2xl border border-rose-100 shadow-sm flex items-center justify-between relative overflow-hidden">
+        <div class="absolute -right-2 -bottom-2 w-16 h-16 bg-rose-50 rounded-full opacity-50"></div>
+        <div>
+          <p class="text-xs font-semibold text-rose-600 mb-1 flex items-center gap-1">
+            <i class="fa-solid fa-triangle-exclamation animate-pulse"></i> مستحقة ومتأخرة
+          </p>
+          <h3 id="statOverdueInvoices" class="text-2xl font-black text-rose-600">0</h3>
+        </div>
+        <div class="w-12 h-12 bg-rose-50 rounded-xl flex items-center justify-center text-rose-600 text-xl">
+          <i class="fa-solid fa-bell"></i>
+        </div>
+      </div>
+
+      <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
+        <div>
+          <p class="text-xs font-semibold text-slate-500 mb-1">المتبقي للتحصيل</p>
+          <h3 id="statTotalAmount" class="text-xl font-black text-slate-900">0 د.ع</h3>
+        </div>
+        <div class="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center text-purple-600 text-xl">
+          <i class="fa-solid fa-wallet"></i>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filter & Search Bar -->
+    <div
+      class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-center gap-4 no-print">
+      <div class="relative w-full md:w-96">
+        <i class="fa-solid fa-search absolute right-3.5 top-3.5 text-slate-400 text-sm"></i>
+        <input type="text" id="searchInput" oninput="renderInvoices()"
+          placeholder="بحث برقم الفاتورة أو اسم الصيدلية..."
+          class="w-full pl-4 pr-10 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+      </div>
+
+      <div class="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-1">
+        <button onclick="setFilter('ALL')" id="filterALL"
+          class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-blue-600 text-white shadow-sm transition">الكل</button>
+        <button onclick="setFilter('OVERDUE')" id="filterOVERDUE"
+          class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-rose-600 hover:bg-rose-50 transition flex items-center gap-1">
+          <i class="fa-solid fa-circle-exclamation"></i> المستحقة والمتأخرة
+        </button>
+        <button onclick="setFilter('PENDING')" id="filterPENDING"
+          class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">المعلقة</button>
+        <button onclick="setFilter('COMPLETED')" id="filterCOMPLETED"
+          class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">المكتملة</button>
+        <button onclick="setFilter('ARCHIVED')" id="filterARCHIVED"
+          class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">المؤرشفة</button>
+      </div>
+    </div>
+
+    <!-- Invoices Table -->
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden no-print">
+      <div class="overflow-x-auto">
+        <table class="w-full text-right text-sm">
+          <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold text-xs uppercase">
+            <tr>
+              <th class="p-4">رقم الفاتورة</th>
+              <th class="p-4">التاريخ</th>
+              <th class="p-4">تاريخ الاستحقاق</th>
+              <th class="p-4">الجهة / الصيدلية</th>
+              <th class="p-4 text-center">المواد (واصل/راجع)</th>
+              <th class="p-4">المبلغ الأصلي</th>
+              <th class="p-4">الخصم %</th>
+              <th class="p-4">المبلغ الصافي</th>
+              <th class="p-4">المتبقي</th>
+              <th class="p-4 text-center">الحالة والتنبيه</th>
+              <th class="p-4 text-center">الإجراءات</th>
+            </tr>
+          </thead>
+          <tbody id="invoicesTableBody" class="divide-y divide-slate-100">
+            <!-- Dynamic Rows -->
+          </tbody>
+        </table>
+      </div>
+      <div id="emptyState" class="hidden p-12 text-center text-slate-400">
+        <i class="fa-solid fa-folder-open text-4xl mb-3"></i>
+        <p class="text-sm font-semibold">لا توجد فواتير مطابقة للبحث أو التصفية</p>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Modal: Create / Edit Invoice -->
+  <div id="invoiceModal"
+    class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden animate-fade-in">
+      <div class="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
+        <h3 id="modalTitle" class="text-base font-bold flex items-center gap-2">
+          <i class="fa-solid fa-file-circle-plus text-blue-400"></i> إضافة فاتورة جديدة
+        </h3>
+        <button onclick="closeInvoiceModal()" class="text-slate-400 hover:text-white transition"><i
+            class="fa-solid fa-times text-lg"></i></button>
+      </div>
+
+      <form id="invoiceForm" onsubmit="saveInvoice(event)" class="p-6 space-y-4">
+        <input type="hidden" id="formInvoiceId">
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">رقم الفاتورة <span
+                class="text-rose-500">*</span></label>
+            <input type="text" id="formInvoiceNumber" required
+              class="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              placeholder="INV-2026-001">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">تاريخ الفاتورة <span
+                class="text-rose-500">*</span></label>
+            <input type="date" id="formInvoiceDate" required
+              class="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-xs font-bold text-slate-600 mb-1">اسم الصيدلية / المذخر <span
+                class="text-rose-500">*</span></label>
+            <input type="text" id="formCustomerName" required
+              class="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              placeholder="صيدلية الرواد المركزية">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">
+              تاريخ الاستحقاق للدفع <span class="text-rose-500">*</span>
+            </label>
+            <input type="date" id="formDueDate" required
+              class="w-full px-3.5 py-2 rounded-xl border border-amber-300 bg-amber-50/40 text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">إجمالي عدد المواد</label>
+            <input type="number" min="0" id="formTotalItems" value="0"
+              class="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">عدد المواد غير الواصل أو الراجع</label>
+            <input type="number" min="0" id="formUndeliveredItems" value="0"
+              class="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">مبلغ الفاتورة الأصلي <span
+                class="text-rose-500">*</span></label>
+            <input type="number" step="any" min="0" id="formOriginalAmount" required oninput="calcNetModal()"
+              class="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              placeholder="0.00">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">مقدار الخصم (%)</label>
+            <input type="number" step="any" min="0" max="100" id="formDiscountPercent" value="0"
+              oninput="calcNetModal()"
+              class="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              placeholder="0">
+          </div>
+          <div
+            class="md:col-span-2 bg-blue-50 p-3.5 rounded-xl border border-blue-100 flex justify-between items-center">
+            <span class="text-xs font-bold text-blue-800">المبلغ بعد الخصم (الصافي الأولي):</span>
+            <span id="formAmountAfterDiscount" class="text-base font-black text-blue-900">0.00</span>
+          </div>
+        </div>
+
+        <div class="pt-4 border-t border-slate-100 flex justify-end gap-2">
+          <button type="button" onclick="closeInvoiceModal()"
+            class="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-bold text-slate-700 transition">إلغاء</button>
+          <button type="submit"
+            class="px-5 py-2 bg-blue-600 hover:bg-blue-700 rounded-xl text-xs font-bold text-white shadow-md transition">حفظ
+            الفاتورة</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Details & Management Hub (المردود، البونص، المبالغ الأخرى، التحويلات والأرشفة) -->
+  <div id="detailsModal"
+    class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white w-full max-w-4xl max-h-[90vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden">
+      <!-- Modal Header -->
+      <div class="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
+        <div>
+          <div class="flex items-center gap-2">
+            <h3 id="detInvoiceTitle" class="text-base font-bold">تفاصيل الفاتورة #INV-000</h3>
+            <span id="detOverdueBadge"
+              class="hidden px-2 py-0.5 rounded text-[11px] font-bold bg-rose-600 text-white animate-pulse">متأخرة عن
+              السداد</span>
+          </div>
+          <p id="detCustomerSub" class="text-xs text-slate-400">صيدلية ...</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="printCurrentInvoice()"
+            class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1">
+            <i class="fa-solid fa-print"></i> طباعة / PDF
+          </button>
+          <button onclick="closeDetailsModal()" class="text-slate-400 hover:text-white transition"><i
+              class="fa-solid fa-times text-lg"></i></button>
+        </div>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="p-6 overflow-y-auto space-y-6 flex-1 bg-slate-50/50">
+
+        <!-- Summary Cards Grid -->
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 bg-white p-4 rounded-2xl border border-slate-200">
+          <div>
+            <span class="text-[11px] text-slate-400 font-semibold block">المبلغ بعد الخصم</span>
+            <span id="detAmountAfterDiscount" class="text-sm font-bold text-slate-800">0</span>
+          </div>
+          <div>
+            <span class="text-[11px] text-slate-400 font-semibold block">إجمالي المردودات</span>
+            <span id="detTotalReturns" class="text-sm font-bold text-rose-600">0</span>
+          </div>
+          <div>
+            <span class="text-[11px] text-slate-400 font-semibold block">إجمالي البونص</span>
+            <span id="detTotalBonus" class="text-sm font-bold text-indigo-600">0</span>
+          </div>
+          <div>
+            <span class="text-[11px] text-slate-400 font-semibold block">مبالغ أخرى / تسويات</span>
+            <span id="detTotalOther" class="text-sm font-bold text-amber-600">0</span>
+          </div>
+          <div>
+            <span class="text-[11px] text-slate-400 font-semibold block">المحول / المدفوع</span>
+            <span id="detTotalTransfers" class="text-sm font-bold text-emerald-600">0</span>
+          </div>
+          <div
+            class="col-span-2 sm:col-span-5 pt-3 border-t border-slate-100 flex flex-wrap justify-between items-center gap-2">
+            <div class="flex items-center gap-2 text-xs">
+              <span class="font-bold text-slate-600">تاريخ الاستحقاق:</span>
+              <span id="detDueDateDisplay" class="font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded">--</span>
+              <span id="detDaysRemaining" class="text-xs font-semibold"></span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-bold text-slate-600">المبلغ المتبقي للتحصيل:</span>
+              <span id="detRemainingBalance" class="text-lg font-black text-blue-700">0 د.ع</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Quick-Add Tabs / Buttons -->
+        <div class="flex flex-wrap gap-2">
+          <button onclick="showSubForm('return')"
+            class="px-4 py-2 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
+            <i class="fa-solid fa-rotate-left"></i> إضافة مردود
+          </button>
+          <button onclick="showSubForm('bonus')"
+            class="px-4 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
+            <i class="fa-solid fa-gift"></i> إضافة بونص
+          </button>
+          <button onclick="showSubForm('other')"
+            class="px-4 py-2 bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
+            <i class="fa-solid fa-scale-balanced"></i> إضافة مبالغ أخرى / تسوية
+          </button>
+          <button onclick="showSubForm('payment')"
+            class="px-4 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
+            <i class="fa-solid fa-money-bill-transfer"></i> تسجيل تحويل / دفعة
+          </button>
+        </div>
+
+        <!-- Sub-Form: Return Entry -->
+        <div id="subFormReturn" class="hidden bg-white p-4 rounded-2xl border border-rose-200 shadow-sm space-y-3">
+          <div class="flex justify-between items-center border-b border-rose-100 pb-2">
+            <h4 class="text-xs font-bold text-rose-800"><i class="fa-solid fa-rotate-left"></i> تسجيل مادة راجعة / مردود
+            </h4>
+            <button onclick="hideSubForms()" class="text-slate-400 hover:text-slate-600 text-xs"><i
+                class="fa-solid fa-times"></i> إغلاق</button>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-5 gap-2">
+            <input type="text" id="retItemName" placeholder="اسم المادة"
+              class="sm:col-span-2 px-3 py-1.5 text-xs rounded-lg border border-slate-200">
+            <input type="number" id="retQuantity" placeholder="الكمية"
+              class="px-3 py-1.5 text-xs rounded-lg border border-slate-200">
+            <input type="number" id="retAmount" placeholder="المبلغ"
+              class="px-3 py-1.5 text-xs rounded-lg border border-slate-200">
+            <input type="number" id="retDiscount" placeholder="الخصم %" value="0"
+              class="px-3 py-1.5 text-xs rounded-lg border border-slate-200">
+            <input type="date" id="retDate"
+              class="sm:col-span-2 px-3 py-1.5 text-xs rounded-lg border border-slate-200">
+            <button onclick="addReturnItem()"
+              class="sm:col-span-3 px-4 py-1.5 bg-rose-600 text-white rounded-lg text-xs font-bold hover:bg-rose-700 transition">إضافة
+              إلى المردودات</button>
+          </div>
+        </div>
+
+        <!-- Sub-Form: Bonus Entry -->
+        <div id="subFormBonus" class="hidden bg-white p-4 rounded-2xl border border-indigo-200 shadow-sm space-y-3">
+          <div class="flex justify-between items-center border-b border-indigo-100 pb-2">
+            <h4 class="text-xs font-bold text-indigo-800"><i class="fa-solid fa-gift"></i> تسجيل بونص</h4>
+            <button onclick="hideSubForms()" class="text-slate-400 hover:text-slate-600 text-xs"><i
+                class="fa-solid fa-times"></i> إغلاق</button>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-4 gap-2">
+            <input type="text" id="bonPharmacyName" placeholder="اسم الصيدلية"
+              class="px-3 py-1.5 text-xs rounded-lg border border-slate-200">
+            <input type="number" id="bonAmount" placeholder="المبلغ"
+              class="px-3 py-1.5 text-xs rounded-lg border border-slate-200">
+            <input type="number" id="bonDiscount" placeholder="الخصم %" value="0"
+              class="px-3 py-1.5 text-xs rounded-lg border border-slate-200">
+            <input type="date" id="bonDate" class="px-3 py-1.5 text-xs rounded-lg border border-slate-200">
+            <button onclick="addBonusItem()"
+              class="sm:col-span-4 px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition">إضافة
+              البونص</button>
+          </div>
+        </div>
+
+        <!-- New Sub-Form: Other Amounts Entry -->
+        <div id="subFormOther" class="hidden bg-white p-4 rounded-2xl border border-amber-200 shadow-sm space-y-3">
+          <div class="flex justify-between items-center border-b border-amber-100 pb-2">
+            <h4 class="text-xs font-bold text-amber-800"><i class="fa-solid fa-scale-balanced"></i> تسجيل مبالغ أخرى
+              وتسويات</h4>
+            <button onclick="hideSubForms()" class="text-slate-400 hover:text-slate-600 text-xs"><i
+                class="fa-solid fa-times"></i> إغلاق</button>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-4 gap-2">
+            <input type="text" id="othDescription" placeholder="البيان / سبب المبلغ (مثلاً: فرق سعر، مصاريف نقل)"
+              class="sm:col-span-2 px-3 py-1.5 text-xs rounded-lg border border-slate-200">
+            <input type="number" id="othAmount" placeholder="المبلغ"
+              class="px-3 py-1.5 text-xs rounded-lg border border-slate-200">
+            <select id="othType" class="px-3 py-1.5 text-xs rounded-lg border border-slate-200 bg-white">
+              <option value="deduct">خصم / تنزيل من الفاتورة (-)</option>
+              <option value="add">إضافة / تحميل على الفاتورة (+)</option>
+            </select>
+            <input type="date" id="othDate"
+              class="sm:col-span-2 px-3 py-1.5 text-xs rounded-lg border border-slate-200">
+            <button onclick="addOtherAmountItem()"
+              class="sm:col-span-2 px-4 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-bold hover:bg-amber-700 transition">إضافة
+              المبلغ</button>
+          </div>
+        </div>
+
+        <!-- Sub-Form: Payment Entry -->
+        <div id="subFormPayment" class="hidden bg-white p-4 rounded-2xl border border-emerald-200 shadow-sm space-y-3">
+          <div class="flex justify-between items-center border-b border-emerald-100 pb-2">
+            <h4 class="text-xs font-bold text-emerald-800"><i class="fa-solid fa-money-bill-transfer"></i> تسجيل تحويل
+              مالي / دفعة</h4>
+            <button onclick="hideSubForms()" class="text-slate-400 hover:text-slate-600 text-xs"><i
+                class="fa-solid fa-times"></i> إغلاق</button>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <input type="number" id="payAmount" placeholder="المبلغ المحول"
+              class="px-3 py-1.5 text-xs rounded-lg border border-slate-200">
+            <input type="date" id="payDate" class="px-3 py-1.5 text-xs rounded-lg border border-slate-200">
+            <button onclick="addPaymentItem()"
+              class="px-4 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition">تسجيل
+              الحوالة</button>
+          </div>
+        </div>
+
+        <!-- Tables for Logs -->
+        <div class="space-y-4">
+          <!-- Returns Log -->
+          <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div
+              class="bg-slate-50 px-4 py-2 border-b border-slate-200 text-xs font-bold text-slate-700 flex justify-between">
+              <span>سجل المردودات</span>
+              <span id="retCountBadge" class="text-slate-400">0 مادة</span>
+            </div>
+            <table class="w-full text-right text-xs">
+              <thead class="bg-slate-50/50 text-slate-400 border-b">
+                <tr>
+                  <th class="p-2">المادة</th>
+                  <th class="p-2">الكمية</th>
+                  <th class="p-2">المبلغ</th>
+                  <th class="p-2">الخصم</th>
+                  <th class="p-2">التاريخ</th>
+                  <th class="p-2 text-center">حذف</th>
+                </tr>
+              </thead>
+              <tbody id="detReturnsTableBody"></tbody>
+            </table>
+          </div>
+
+          <!-- Bonus Log -->
+          <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div
+              class="bg-slate-50 px-4 py-2 border-b border-slate-200 text-xs font-bold text-slate-700 flex justify-between">
+              <span>سجل البونص</span>
+              <span id="bonCountBadge" class="text-slate-400">0 عملية</span>
+            </div>
+            <table class="w-full text-right text-xs">
+              <thead class="bg-slate-50/50 text-slate-400 border-b">
+                <tr>
+                  <th class="p-2">الصيدلية</th>
+                  <th class="p-2">المبلغ</th>
+                  <th class="p-2">الخصم</th>
+                  <th class="p-2">التاريخ</th>
+                  <th class="p-2 text-center">حذف</th>
+                </tr>
+              </thead>
+              <tbody id="detBonusTableBody"></tbody>
+            </table>
+          </div>
+
+          <!-- New: Other Amounts Log -->
+          <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div
+              class="bg-slate-50 px-4 py-2 border-b border-slate-200 text-xs font-bold text-slate-700 flex justify-between">
+              <span>سجل المبالغ الأخرى والتسويات</span>
+              <span id="othCountBadge" class="text-slate-400">0 تسوية</span>
+            </div>
+            <table class="w-full text-right text-xs">
+              <thead class="bg-slate-50/50 text-slate-400 border-b">
+                <tr>
+                  <th class="p-2">البيان / السبب</th>
+                  <th class="p-2">النوع</th>
+                  <th class="p-2">المبلغ</th>
+                  <th class="p-2">التاريخ</th>
+                  <th class="p-2 text-center">حذف</th>
+                </tr>
+              </thead>
+              <tbody id="detOtherTableBody"></tbody>
+            </table>
+          </div>
+
+          <!-- Payments Log -->
+          <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div
+              class="bg-slate-50 px-4 py-2 border-b border-slate-200 text-xs font-bold text-slate-700 flex justify-between">
+              <span>سجل التحويلات والدفعات</span>
+              <span id="payCountBadge" class="text-slate-400">0 تحويل</span>
+            </div>
+            <table class="w-full text-right text-xs">
+              <thead class="bg-slate-50/50 text-slate-400 border-b">
+                <tr>
+                  <th class="p-2">تاريخ التحويل</th>
+                  <th class="p-2">المبلغ المحول</th>
+                  <th class="p-2 text-center">حذف</th>
+                </tr>
+              </thead>
+              <tbody id="detPaymentsTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="bg-white px-6 py-3 border-t border-slate-200 flex flex-wrap justify-between items-center gap-2">
+        <div class="flex items-center gap-2">
+          <button onclick="toggleArchiveStatus()" id="archiveBtn"
+            class="px-4 py-2 rounded-xl text-xs font-bold border border-slate-300 hover:bg-slate-100 transition flex items-center gap-1.5">
+            <i class="fa-solid fa-box-archive"></i> <span>أرشفة الفاتورة</span>
+          </button>
+          <button onclick="editCurrentInvoiceDetails()"
+            class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
+            <i class="fa-solid fa-pen-to-square"></i> تعديل البيانات الأساسية
+          </button>
+        </div>
+        <button onclick="closeDetailsModal()"
+          class="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition">إغلاق</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Printable Area (PDF Ready) -->
+  <div id="printableArea" class="hidden print:block p-8 bg-white text-black max-w-3xl mx-auto">
+    <div class="border-b-2 border-slate-900 pb-4 mb-6 flex justify-between items-center">
+      <div>
+        <h1 class="text-2xl font-black mb-1">تقرير ملخص الفاتورة</h1>
+        <p class="text-sm text-slate-600">نظام إدارةالفواتير / شركة دجلة للصناعت الدوائية</p>
+      </div>
+      <div class="text-left text-sm">
+        <p><strong>رقم الفاتورة:</strong> <span id="printInvNumber"></span></p>
+        <p><strong>التاريخ:</strong> <span id="printInvDate"></span></p>
+        <p><strong>تاريخ الاستحقاق:</strong> <span id="printInvDueDate"></span></p>
+        <p><strong>الحالة:</strong> <span id="printInvStatus"></span></p>
+      </div>
+    </div>
+
+    <div class="mb-6">
+      <p class="text-base font-bold">اسم الصيدلية / العميل: <span id="printCustomerName" class="font-normal"></span></p>
+    </div>
+
+    <!-- Main Amounts -->
+    <table class="w-full text-right border-collapse border border-slate-300 text-sm mb-6">
+      <thead class="bg-slate-100">
+        <tr>
+          <th class="border border-slate-300 p-2">عدد المواد</th>
+          <th class="border border-slate-300 p-2">غير الواصل / الراجع</th>
+          <th class="border border-slate-300 p-2">المبلغ الأصلي</th>
+          <th class="border border-slate-300 p-2">نسبة الخصم</th>
+          <th class="border border-slate-300 p-2">المبلغ بعد الخصم</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="border border-slate-300 p-2" id="printTotalItems">0</td>
+          <td class="border border-slate-300 p-2" id="printUndelivered">0</td>
+          <td class="border border-slate-300 p-2" id="printOriginalAmount">0</td>
+          <td class="border border-slate-300 p-2" id="printDiscountPercent">0%</td>
+          <td class="border border-slate-300 p-2 font-bold" id="printNetAfterDiscount">0</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Calculation Summary -->
+    <section class="mb-5">
+      <h4 class="font-bold text-sm mb-2 border-b border-slate-400 pb-1">ملخص الحساب</h4>
+      <table class="w-full text-right border-collapse border border-slate-300 text-sm">
+        <tbody>
+          <tr><td class="border border-slate-300 p-2">المبلغ الأصلي</td><td class="border border-slate-300 p-2 font-bold" id="printSumOriginal">0</td></tr>
+          <tr><td class="border border-slate-300 p-2">(-) الخصم <span id="printSumDiscountPct"></span></td><td class="border border-slate-300 p-2 font-bold" id="printSumDiscountVal">0</td></tr>
+          <tr class="bg-slate-50"><td class="border border-slate-300 p-2">= المبلغ بعد الخصم</td><td class="border border-slate-300 p-2 font-bold" id="printSumAfterDiscount">0</td></tr>
+          <tr><td class="border border-slate-300 p-2">(-) إجمالي المردودات</td><td class="border border-slate-300 p-2 font-bold" id="printReturnsTotal">0</td></tr>
+          <tr><td class="border border-slate-300 p-2">(-) إجمالي البونص</td><td class="border border-slate-300 p-2 font-bold" id="printBonusTotal">0</td></tr>
+          <tr><td class="border border-slate-300 p-2">(+/-) صافي المبالغ الأخرى والتسويات</td><td class="border border-slate-300 p-2 font-bold" id="printOtherTotal">0</td></tr>
+          <tr class="bg-slate-50"><td class="border border-slate-300 p-2">= صافي الفاتورة المستحق</td><td class="border border-slate-300 p-2 font-bold" id="printNetInvoice">0</td></tr>
+          <tr><td class="border border-slate-300 p-2">(-) المبالغ المحولة / المدفوعة</td><td class="border border-slate-300 p-2 font-bold" id="printPaymentsTotal">0</td></tr>
+          <tr class="bg-slate-200"><td class="border border-slate-400 p-2 font-black">= المتبقي النهائي للتحصيل</td><td class="border border-slate-400 p-2 font-black text-base" id="printRemainingTotal">0</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- Returns Detail -->
+    <section class="mb-5">
+      <h4 class="font-bold text-sm mb-2 border-b border-slate-400 pb-1">تفاصيل المردودات</h4>
+      <table class="w-full text-right border-collapse border border-slate-300 text-xs">
+        <thead class="bg-slate-100"><tr>
+          <th class="border border-slate-300 p-1.5">#</th>
+          <th class="border border-slate-300 p-1.5">المادة</th>
+          <th class="border border-slate-300 p-1.5">الكمية</th>
+          <th class="border border-slate-300 p-1.5">المبلغ</th>
+          <th class="border border-slate-300 p-1.5">الخصم %</th>
+          <th class="border border-slate-300 p-1.5">الصافي</th>
+          <th class="border border-slate-300 p-1.5">التاريخ</th>
+        </tr></thead>
+        <tbody id="printReturnsBody"></tbody>
+      </table>
+    </section>
+
+    <!-- Bonus Detail -->
+    <section class="mb-5">
+      <h4 class="font-bold text-sm mb-2 border-b border-slate-400 pb-1">تفاصيل البونص</h4>
+      <table class="w-full text-right border-collapse border border-slate-300 text-xs">
+        <thead class="bg-slate-100"><tr>
+          <th class="border border-slate-300 p-1.5">#</th>
+          <th class="border border-slate-300 p-1.5">الصيدلية</th>
+          <th class="border border-slate-300 p-1.5">المبلغ</th>
+          <th class="border border-slate-300 p-1.5">الخصم %</th>
+          <th class="border border-slate-300 p-1.5">الصافي</th>
+          <th class="border border-slate-300 p-1.5">التاريخ</th>
+        </tr></thead>
+        <tbody id="printBonusBody"></tbody>
+      </table>
+    </section>
+
+    <!-- Other Amounts Detail -->
+    <section class="mb-5">
+      <h4 class="font-bold text-sm mb-2 border-b border-slate-400 pb-1">تفاصيل المبالغ الأخرى والتسويات</h4>
+      <table class="w-full text-right border-collapse border border-slate-300 text-xs">
+        <thead class="bg-slate-100"><tr>
+          <th class="border border-slate-300 p-1.5">#</th>
+          <th class="border border-slate-300 p-1.5">البيان / السبب</th>
+          <th class="border border-slate-300 p-1.5">النوع</th>
+          <th class="border border-slate-300 p-1.5">المبلغ</th>
+          <th class="border border-slate-300 p-1.5">التاريخ</th>
+        </tr></thead>
+        <tbody id="printOtherBody"></tbody>
+      </table>
+    </section>
+
+    <!-- Payments Detail -->
+    <section class="mb-5">
+      <h4 class="font-bold text-sm mb-2 border-b border-slate-400 pb-1">تفاصيل التحويلات والدفعات</h4>
+      <table class="w-full text-right border-collapse border border-slate-300 text-xs">
+        <thead class="bg-slate-100"><tr>
+          <th class="border border-slate-300 p-1.5">#</th>
+          <th class="border border-slate-300 p-1.5">تاريخ التحويل</th>
+          <th class="border border-slate-300 p-1.5">المبلغ المحول</th>
+        </tr></thead>
+        <tbody id="printPaymentsBody"></tbody>
+      </table>
+    </section>
+
+    <div class="text-xs text-center text-slate-500 border-t pt-4 mt-8">
+      تم إنشاء هذا التقرير آلياً بواسطة المنظومة في <span id="printTimestamp"></span>
+    </div>
+  </div>
+
+  <!-- JavaScript Logic -->
+  <script>
+    // State Management
+    let invoices = JSON.parse(localStorage.getItem('app_invoices_v2')) || [];
+    let currentFilter = 'ALL';
+    let activeInvoiceId = null;
+
+    // Initial Preload if empty
+    if (invoices.length === 0) {
+      const today = new Date();
+      const pastDue = new Date();
+      pastDue.setDate(today.getDate() - 5);
+
+      invoices = [
+        {
+          id: '1',
+          number: 'INV-2026-001',
+          date: '2026-08-10',
+          dueDate: pastDue.toISOString().split('T')[0],
+          customer: 'صيدلية النور الحديثة',
+          totalItems: 45,
+          undeliveredItems: 2,
+          originalAmount: 1500000,
+          discountPercent: 10,
+          amountAfterDiscount: 1350000,
+          isArchived: false,
+          returns: [{ id: 'r1', item: 'أقراص باراسيتامول 500 ملغم', qty: 2, amount: 20000, discount: 0, date: '2026-08-11' }],
+          bonuses: [{ id: 'b1', pharmacy: 'صيدلية النور', amount: 15000, discount: 0, date: '2026-08-11' }],
+          otherAmounts: [{ id: 'o1', description: 'تنزيل بدل تأخير شحن', type: 'deduct', amount: 15000, date: '2026-08-12' }],
+          payments: [{ id: 'p1', amount: 1000000, date: '2026-08-13' }]
+        }
+      ];
+      saveToStorage();
+    }
+
+    function saveToStorage() {
+      localStorage.setItem('app_invoices_v2', JSON.stringify(invoices));
+    }
+
+    // Advanced Calculations Helper
+    function getInvoiceCalculations(inv) {
+      const returnsSum = (inv.returns || []).reduce((acc, r) => acc + (parseFloat(r.amount) || 0) * (1 - (parseFloat(r.discount) || 0) / 100), 0);
+      const bonusSum = (inv.bonuses || []).reduce((acc, b) => acc + (parseFloat(b.amount) || 0) * (1 - (parseFloat(b.discount) || 0) / 100), 0);
+
+      // Other amounts (+ or -)
+      const otherNet = (inv.otherAmounts || []).reduce((acc, o) => {
+        const val = parseFloat(o.amount) || 0;
+        return o.type === 'add' ? acc + val : acc - val;
+      }, 0);
+
+      const paymentsSum = (inv.payments || []).reduce((acc, p) => acc + (parseFloat(p.amount) || 0), 0);
+
+      const netInvoice = (parseFloat(inv.amountAfterDiscount) || 0) - returnsSum - bonusSum + otherNet;
+      const remaining = netInvoice - paymentsSum;
+      const isCompleted = remaining <= 0;
+
+      // Due date checks
+      const todayStr = new Date().toISOString().split('T')[0];
+      const isOverdue = !isCompleted && inv.dueDate && inv.dueDate < todayStr;
+      const isDueToday = !isCompleted && inv.dueDate && inv.dueDate === todayStr;
+
+      let daysDiff = 0;
+      if (inv.dueDate) {
+        const due = new Date(inv.dueDate);
+        const today = new Date(todayStr);
+        const diffTime = due - today;
+        daysDiff = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      }
+
+      return { returnsSum, bonusSum, otherNet, paymentsSum, netInvoice, remaining, isCompleted, isOverdue, isDueToday, daysDiff };
+    }
+
+    function formatNumber(num) {
+      return Number(num || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    }
+
+    // Render Main Dashboard & Invoices Table
+    function renderInvoices() {
+      const search = document.getElementById('searchInput').value.trim().toLowerCase();
+      const tbody = document.getElementById('invoicesTableBody');
+      const emptyState = document.getElementById('emptyState');
+      tbody.innerHTML = '';
+
+      let totalCount = invoices.length;
+      let completedCount = 0;
+      let pendingCount = 0;
+      let overdueCount = 0;
+      let totalRemainingSum = 0;
+
+      const filtered = invoices.filter(inv => {
+        const calcs = getInvoiceCalculations(inv);
+
+        if (calcs.isCompleted) completedCount++;
+        else {
+          pendingCount++;
+          if (calcs.isOverdue) overdueCount++;
+        }
+
+        totalRemainingSum += Math.max(0, calcs.remaining);
+
+        // Status Filters
+        if (currentFilter === 'COMPLETED' && !calcs.isCompleted) return false;
+        if (currentFilter === 'PENDING' && (calcs.isCompleted || inv.isArchived)) return false;
+        if (currentFilter === 'OVERDUE' && (!calcs.isOverdue || inv.isArchived)) return false;
+        if (currentFilter === 'ARCHIVED' && !inv.isArchived) return false;
+
+        // Search Filter
+        if (search) {
+          const matchNum = inv.number.toLowerCase().includes(search);
+          const matchCust = (inv.customer || '').toLowerCase().includes(search);
+          return matchNum || matchCust;
+        }
+        return true;
+      });
+
+      // Update KPI Cards
+      document.getElementById('statTotalInvoices').innerText = totalCount;
+      document.getElementById('statCompletedInvoices').innerText = completedCount;
+      document.getElementById('statPendingInvoices').innerText = pendingCount;
+      document.getElementById('statOverdueInvoices').innerText = overdueCount;
+      document.getElementById('statTotalAmount').innerText = formatNumber(totalRemainingSum) + ' د.ع';
+
+      if (filtered.length === 0) {
+        emptyState.classList.remove('hidden');
+      } else {
+        emptyState.classList.add('hidden');
+        filtered.forEach(inv => {
+          const calcs = getInvoiceCalculations(inv);
+          const tr = document.createElement('tr');
+          tr.className = `hover:bg-slate-50 transition border-b border-slate-100 ${calcs.isOverdue ? 'bg-rose-50/30' : ''}`;
+
+          // Badge Logic
+          let statusBadge = '';
+          if (calcs.isCompleted) {
+            statusBadge = `<span class="px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-bold border border-emerald-200">مكتملة</span>`;
+          } else if (calcs.isOverdue) {
+            statusBadge = `<span class="px-2.5 py-1 bg-rose-100 text-rose-700 rounded-lg text-xs font-bold border border-rose-300 flex items-center justify-center gap-1">
+              <i class="fa-solid fa-triangle-exclamation animate-pulse"></i> متأخرة (${Math.abs(calcs.daysDiff)} يوم)
+            </span>`;
+          } else if (calcs.isDueToday) {
+            statusBadge = `<span class="px-2.5 py-1 bg-amber-100 text-amber-800 rounded-lg text-xs font-bold border border-amber-300">مستحقة اليوم</span>`;
+          } else {
+            statusBadge = `<span class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-bold border border-slate-200">معلقة (باقي ${calcs.daysDiff} يوم)</span>`;
+          }
+
+          if (inv.isArchived) {
+            statusBadge += ` <span class="px-2 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px] mr-1 block mt-1">مؤرشفة</span>`;
+          }
+
+          tr.innerHTML = `
+            <td class="p-4 font-bold text-blue-600">${inv.number}</td>
+            <td class="p-4 text-slate-500 text-xs">${inv.date}</td>
+            <td class="p-4 text-xs font-semibold ${calcs.isOverdue ? 'text-rose-600 font-bold' : 'text-slate-700'}">
+              ${inv.dueDate || '—'}
+            </td>
+            <td class="p-4 font-semibold text-slate-800">${inv.customer || '—'}</td>
+            <td class="p-4 text-center">
+              <span class="text-emerald-600 font-bold">${inv.totalItems - (inv.undeliveredItems || 0)}</span> / 
+              <span class="text-rose-500 font-bold">${inv.undeliveredItems || 0}</span>
+            </td>
+            <td class="p-4 text-slate-600">${formatNumber(inv.originalAmount)}</td>
+            <td class="p-4 font-bold text-slate-700">${inv.discountPercent}%</td>
+            <td class="p-4 font-bold text-slate-900">${formatNumber(calcs.netInvoice)}</td>
+            <td class="p-4 font-bold ${calcs.remaining > 0 ? 'text-rose-600' : 'text-emerald-600'}">${formatNumber(calcs.remaining)}</td>
+            <td class="p-4 text-center">${statusBadge}</td>
+            <td class="p-4 text-center">
+              <div class="flex items-center justify-center gap-1.5">
+                <button onclick="openDetailsModal('${inv.id}')" title="فتح وإدارة" class="p-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg transition text-xs">
+                  <i class="fa-solid fa-folder-open"></i>
+                </button>
+                <button onclick="deleteInvoice('${inv.id}')" title="حذف" class="p-2 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg transition text-xs">
+                  <i class="fa-solid fa-trash-can"></i>
+                </button>
+              </div>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+    }
+
+    function setFilter(type) {
+      currentFilter = type;
+      ['ALL', 'OVERDUE', 'PENDING', 'COMPLETED', 'ARCHIVED'].forEach(t => {
+        const btn = document.getElementById('filter' + t);
+        if (t === type) {
+          btn.className = 'px-3.5 py-1.5 rounded-xl text-xs font-bold bg-blue-600 text-white shadow-sm transition';
+        } else {
+          btn.className = 'px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition';
+        }
+      });
+      renderInvoices();
+    }
+
+    // Invoice Form & Modals
+    function openInvoiceModal(editId = null) {
+      document.getElementById('invoiceForm').reset();
+      const today = new Date().toISOString().split('T')[0];
+      const defaultDue = new Date();
+      defaultDue.setDate(defaultDue.getDate() + 30);
+
+      if (editId) {
+        const inv = invoices.find(i => i.id === editId);
+        if (!inv) return;
+        document.getElementById('modalTitle').innerHTML = `<i class="fa-solid fa-pen-to-square text-blue-400"></i> تعديل الفاتورة`;
+        document.getElementById('formInvoiceId').value = inv.id;
+        document.getElementById('formInvoiceNumber').value = inv.number;
+        document.getElementById('formInvoiceDate').value = inv.date;
+        document.getElementById('formDueDate').value = inv.dueDate || defaultDue.toISOString().split('T')[0];
+        document.getElementById('formCustomerName').value = inv.customer || '';
+        document.getElementById('formTotalItems').value = inv.totalItems || 0;
+        document.getElementById('formUndeliveredItems').value = inv.undeliveredItems || 0;
+        document.getElementById('formOriginalAmount').value = inv.originalAmount;
+        document.getElementById('formDiscountPercent').value = inv.discountPercent || 0;
+        calcNetModal();
+      } else {
+        document.getElementById('modalTitle').innerHTML = `<i class="fa-solid fa-file-circle-plus text-blue-400"></i> إضافة فاتورة جديدة`;
+        document.getElementById('formInvoiceId').value = '';
+        document.getElementById('formInvoiceDate').value = today;
+        document.getElementById('formDueDate').value = defaultDue.toISOString().split('T')[0];
+        calcNetModal();
+      }
+      document.getElementById('invoiceModal').classList.remove('hidden');
+    }
+
+    function closeInvoiceModal() {
+      document.getElementById('invoiceModal').classList.add('hidden');
+    }
+
+    function calcNetModal() {
+      const original = parseFloat(document.getElementById('formOriginalAmount').value) || 0;
+      const discount = parseFloat(document.getElementById('formDiscountPercent').value) || 0;
+      const net = original * (1 - (discount / 100));
+      document.getElementById('formAmountAfterDiscount').innerText = formatNumber(net) + ' د.ع';
+      return net;
+    }
+
+    function saveInvoice(e) {
+      e.preventDefault();
+      const id = document.getElementById('formInvoiceId').value;
+      const original = parseFloat(document.getElementById('formOriginalAmount').value) || 0;
+      const discount = parseFloat(document.getElementById('formDiscountPercent').value) || 0;
+      const net = original * (1 - (discount / 100));
+
+      if (id) {
+        // Edit
+        const inv = invoices.find(i => i.id === id);
+        if (inv) {
+          inv.number = document.getElementById('formInvoiceNumber').value;
+          inv.date = document.getElementById('formInvoiceDate').value;
+          inv.dueDate = document.getElementById('formDueDate').value;
+          inv.customer = document.getElementById('formCustomerName').value;
+          inv.totalItems = parseInt(document.getElementById('formTotalItems').value) || 0;
+          inv.undeliveredItems = parseInt(document.getElementById('formUndeliveredItems').value) || 0;
+          inv.originalAmount = original;
+          inv.discountPercent = discount;
+          inv.amountAfterDiscount = net;
+        }
+      } else {
+        // New
+        const newInv = {
+          id: Date.now().toString(),
+          number: document.getElementById('formInvoiceNumber').value,
+          date: document.getElementById('formInvoiceDate').value,
+          dueDate: document.getElementById('formDueDate').value,
+          customer: document.getElementById('formCustomerName').value,
+          totalItems: parseInt(document.getElementById('formTotalItems').value) || 0,
+          undeliveredItems: parseInt(document.getElementById('formUndeliveredItems').value) || 0,
+          originalAmount: original,
+          discountPercent: discount,
+          amountAfterDiscount: net,
+          isArchived: false,
+          returns: [],
+          bonuses: [],
+          otherAmounts: [],
+          payments: []
+        };
+        invoices.unshift(newInv);
+      }
+
+      saveToStorage();
+      closeInvoiceModal();
+      renderInvoices();
+      if (activeInvoiceId) renderDetailsView(activeInvoiceId);
+    }
+
+    function deleteInvoice(id) {
+      if (confirm('هل أنت متأكد من رغبتك بحذف هذه الفاتورة وسجلاتها؟')) {
+        invoices = invoices.filter(i => i.id !== id);
+        saveToStorage();
+        renderInvoices();
+      }
+    }
+
+    // Details Modal Hub
+    function openDetailsModal(id) {
+      activeInvoiceId = id;
+      hideSubForms();
+      renderDetailsView(id);
+      document.getElementById('detailsModal').classList.remove('hidden');
+    }
+
+    function closeDetailsModal() {
+      document.getElementById('detailsModal').classList.add('hidden');
+      activeInvoiceId = null;
+      renderInvoices();
+    }
+
+    function renderDetailsView(id) {
+      const inv = invoices.find(i => i.id === id);
+      if (!inv) return;
+
+      const calcs = getInvoiceCalculations(inv);
+
+      document.getElementById('detInvoiceTitle').innerText = `فاتورة رقم #${inv.number} (${inv.date})`;
+      document.getElementById('detCustomerSub').innerText = inv.customer ? `الجهة: ${inv.customer}` : '';
+
+      // Overdue alert in details header
+      const overdueBadge = document.getElementById('detOverdueBadge');
+      if (calcs.isOverdue) {
+        overdueBadge.classList.remove('hidden');
+        overdueBadge.innerText = `متأخرة عن السداد منذ ${Math.abs(calcs.daysDiff)} يوم`;
+      } else {
+        overdueBadge.classList.add('hidden');
+      }
+
+      document.getElementById('detDueDateDisplay').innerText = inv.dueDate || 'غير محدد';
+      const daysRem = document.getElementById('detDaysRemaining');
+      if (calcs.isCompleted) {
+        daysRem.innerText = '(مسددة بالكامل)';
+        daysRem.className = 'text-xs font-bold text-emerald-600';
+      } else if (calcs.isOverdue) {
+        daysRem.innerText = `(متأخرة منذ ${Math.abs(calcs.daysDiff)} يوم)`;
+        daysRem.className = 'text-xs font-bold text-rose-600';
+      } else {
+        daysRem.innerText = `(متبقي ${calcs.daysDiff} يوم)`;
+        daysRem.className = 'text-xs font-bold text-slate-500';
+      }
+
+      document.getElementById('detAmountAfterDiscount').innerText = formatNumber(inv.amountAfterDiscount);
+      document.getElementById('detTotalReturns').innerText = '-' + formatNumber(calcs.returnsSum);
+      document.getElementById('detTotalBonus').innerText = '-' + formatNumber(calcs.bonusSum);
+      document.getElementById('detTotalOther').innerText = (calcs.otherNet >= 0 ? '+' : '') + formatNumber(calcs.otherNet);
+      document.getElementById('detTotalTransfers').innerText = formatNumber(calcs.paymentsSum);
+      document.getElementById('detRemainingBalance').innerText = formatNumber(calcs.remaining) + ' د.ع';
+
+      const archiveBtn = document.getElementById('archiveBtn');
+      if (inv.isArchived) {
+        archiveBtn.innerHTML = `<i class="fa-solid fa-box-open text-amber-600"></i> إلغاء الأرشفة`;
+      } else {
+        archiveBtn.innerHTML = `<i class="fa-solid fa-box-archive text-slate-600"></i> أرشفة الفاتورة`;
+      }
+
+      // Render Returns Table
+      const retTbody = document.getElementById('detReturnsTableBody');
+      retTbody.innerHTML = '';
+      (inv.returns || []).forEach(r => {
+        const net = (parseFloat(r.amount) || 0) * (1 - (parseFloat(r.discount) || 0) / 100);
+        retTbody.innerHTML += `
+          <tr class="border-b">
+            <td class="p-2 font-medium">${r.item}</td>
+            <td class="p-2">${r.qty}</td>
+            <td class="p-2">${formatNumber(r.amount)}</td>
+            <td class="p-2">${r.discount}% (صافي: ${formatNumber(net)})</td>
+            <td class="p-2 text-slate-400">${r.date}</td>
+            <td class="p-2 text-center">
+              <button onclick="removeSubItem('return', '${r.id}')" class="text-rose-500 hover:text-rose-700"><i class="fa-solid fa-xmark"></i></button>
+            </td>
+          </tr>
+        `;
+      });
+      document.getElementById('retCountBadge').innerText = (inv.returns || []).length + ' مادة';
+
+      // Render Bonus Table
+      const bonTbody = document.getElementById('detBonusTableBody');
+      bonTbody.innerHTML = '';
+      (inv.bonuses || []).forEach(b => {
+        const net = (parseFloat(b.amount) || 0) * (1 - (parseFloat(b.discount) || 0) / 100);
+        bonTbody.innerHTML += `
+          <tr class="border-b">
+            <td class="p-2 font-medium">${b.pharmacy}</td>
+            <td class="p-2">${formatNumber(b.amount)}</td>
+            <td class="p-2">${b.discount}% (صافي: ${formatNumber(net)})</td>
+            <td class="p-2 text-slate-400">${b.date}</td>
+            <td class="p-2 text-center">
+              <button onclick="removeSubItem('bonus', '${b.id}')" class="text-rose-500 hover:text-rose-700"><i class="fa-solid fa-xmark"></i></button>
+            </td>
+          </tr>
+        `;
+      });
+      document.getElementById('bonCountBadge').innerText = (inv.bonuses || []).length + ' عملية';
+
+      // Render Other Amounts Table
+      const othTbody = document.getElementById('detOtherTableBody');
+      othTbody.innerHTML = '';
+      (inv.otherAmounts || []).forEach(o => {
+        const isAdd = o.type === 'add';
+        othTbody.innerHTML += `
+          <tr class="border-b">
+            <td class="p-2 font-medium">${o.description}</td>
+            <td class="p-2">
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold ${isAdd ? 'bg-indigo-50 text-indigo-700' : 'bg-rose-50 text-rose-700'}">
+                ${isAdd ? '+ إضافة / زيادة' : '- خصم / تنزيل'}
+              </span>
+            </td>
+            <td class="p-2 font-bold ${isAdd ? 'text-indigo-600' : 'text-rose-600'}">${formatNumber(o.amount)}</td>
+            <td class="p-2 text-slate-400">${o.date}</td>
+            <td class="p-2 text-center">
+              <button onclick="removeSubItem('other', '${o.id}')" class="text-rose-500 hover:text-rose-700"><i class="fa-solid fa-xmark"></i></button>
+            </td>
+          </tr>
+        `;
+      });
+      document.getElementById('othCountBadge').innerText = (inv.otherAmounts || []).length + ' عملية';
+
+      // Render Payments Table
+      const payTbody = document.getElementById('detPaymentsTableBody');
+      payTbody.innerHTML = '';
+      (inv.payments || []).forEach(p => {
+        payTbody.innerHTML += `
+          <tr class="border-b">
+            <td class="p-2">${p.date}</td>
+            <td class="p-2 font-bold text-emerald-600">${formatNumber(p.amount)} د.ع</td>
+            <td class="p-2 text-center">
+              <button onclick="removeSubItem('payment', '${p.id}')" class="text-rose-500 hover:text-rose-700"><i class="fa-solid fa-xmark"></i></button>
+            </td>
+          </tr>
+        `;
+      });
+      document.getElementById('payCountBadge').innerText = (inv.payments || []).length + ' تحويل';
+    }
+
+    // Sub Form Triggers
+    function showSubForm(type) {
+      hideSubForms();
+      const today = new Date().toISOString().split('T')[0];
+      if (type === 'return') {
+        document.getElementById('subFormReturn').classList.remove('hidden');
+        document.getElementById('retDate').value = today;
+      } else if (type === 'bonus') {
+        document.getElementById('subFormBonus').classList.remove('hidden');
+        document.getElementById('bonDate').value = today;
+      } else if (type === 'other') {
+        document.getElementById('subFormOther').classList.remove('hidden');
+        document.getElementById('othDate').value = today;
+      } else if (type === 'payment') {
+        document.getElementById('subFormPayment').classList.remove('hidden');
+        document.getElementById('payDate').value = today;
+      }
+    }
+
+    function hideSubForms() {
+      document.getElementById('subFormReturn').classList.add('hidden');
+      document.getElementById('subFormBonus').classList.add('hidden');
+      document.getElementById('subFormOther').classList.add('hidden');
+      document.getElementById('subFormPayment').classList.add('hidden');
+    }
+
+    function addReturnItem() {
+      const inv = invoices.find(i => i.id === activeInvoiceId);
+      const item = document.getElementById('retItemName').value.trim();
+      const qty = parseInt(document.getElementById('retQuantity').value) || 0;
+      const amount = parseFloat(document.getElementById('retAmount').value) || 0;
+      const discount = parseFloat(document.getElementById('retDiscount').value) || 0;
+      const date = document.getElementById('retDate').value;
+
+      if (!item || amount <= 0) return alert('يرجى كتابة اسم المادة والمبلغ بشكل صحيح');
+
+      if (!inv.returns) inv.returns = [];
+      inv.returns.push({ id: Date.now().toString(), item, qty, amount, discount, date });
+      saveToStorage();
+      hideSubForms();
+      renderDetailsView(activeInvoiceId);
+    }
+
+    function addBonusItem() {
+      const inv = invoices.find(i => i.id === activeInvoiceId);
+      const pharmacy = document.getElementById('bonPharmacyName').value.trim() || inv.customer;
+      const amount = parseFloat(document.getElementById('bonAmount').value) || 0;
+      const discount = parseFloat(document.getElementById('bonDiscount').value) || 0;
+      const date = document.getElementById('bonDate').value;
+
+      if (amount <= 0) return alert('يرجى إدخال مبلغ البونص');
+
+      if (!inv.bonuses) inv.bonuses = [];
+      inv.bonuses.push({ id: Date.now().toString(), pharmacy, amount, discount, date });
+      saveToStorage();
+      hideSubForms();
+      renderDetailsView(activeInvoiceId);
+    }
+
+    function addOtherAmountItem() {
+      const inv = invoices.find(i => i.id === activeInvoiceId);
+      const description = document.getElementById('othDescription').value.trim();
+      const amount = parseFloat(document.getElementById('othAmount').value) || 0;
+      const type = document.getElementById('othType').value;
+      const date = document.getElementById('othDate').value;
+
+      if (!description || amount <= 0) return alert('يرجى إدخال سبب المبلغ والقيمة بشكل صحيح');
+
+      if (!inv.otherAmounts) inv.otherAmounts = [];
+      inv.otherAmounts.push({ id: Date.now().toString(), description, amount, type, date });
+      saveToStorage();
+      hideSubForms();
+      renderDetailsView(activeInvoiceId);
+    }
+
+    function addPaymentItem() {
+      const inv = invoices.find(i => i.id === activeInvoiceId);
+      const amount = parseFloat(document.getElementById('payAmount').value) || 0;
+      const date = document.getElementById('payDate').value;
+
+      if (amount <= 0) return alert('يرجى إدخال مبلغ التحويل');
+
+      if (!inv.payments) inv.payments = [];
+      inv.payments.push({ id: Date.now().toString(), amount, date });
+      saveToStorage();
+      hideSubForms();
+      renderDetailsView(activeInvoiceId);
+    }
+
+    function removeSubItem(type, subId) {
+      const inv = invoices.find(i => i.id === activeInvoiceId);
+      if (!inv) return;
+
+      if (type === 'return') inv.returns = inv.returns.filter(r => r.id !== subId);
+      if (type === 'bonus') inv.bonuses = inv.bonuses.filter(b => b.id !== subId);
+      if (type === 'other') inv.otherAmounts = inv.otherAmounts.filter(o => o.id !== subId);
+      if (type === 'payment') inv.payments = inv.payments.filter(p => p.id !== subId);
+
+      saveToStorage();
+      renderDetailsView(activeInvoiceId);
+    }
+
+    function toggleArchiveStatus() {
+      const inv = invoices.find(i => i.id === activeInvoiceId);
+      if (inv) {
+        inv.isArchived = !inv.isArchived;
+        saveToStorage();
+        renderDetailsView(activeInvoiceId);
+      }
+    }
+
+    function editCurrentInvoiceDetails() {
+      const id = activeInvoiceId;
+      closeDetailsModal();
+      openInvoiceModal(id);
+    }
+
+    // Print & PDF Export
+    function printCurrentInvoice() {
+      const inv = invoices.find(i => i.id === activeInvoiceId);
+      if (!inv) return;
+      const calcs = getInvoiceCalculations(inv);
+
+      document.getElementById('printInvNumber').innerText = inv.number;
+      document.getElementById('printInvDate').innerText = inv.date;
+      document.getElementById('printInvDueDate').innerText = inv.dueDate || '—';
+      document.getElementById('printCustomerName').innerText = inv.customer || '—';
+      document.getElementById('printInvStatus').innerText = calcs.isCompleted ? 'مكتملة ومسددة' : (calcs.isOverdue ? 'متأخرة عن موعد السداد' : 'معلقة');
+      document.getElementById('printTotalItems').innerText = inv.totalItems;
+      document.getElementById('printUndelivered').innerText = inv.undeliveredItems || 0;
+      document.getElementById('printOriginalAmount').innerText = formatNumber(inv.originalAmount);
+      document.getElementById('printDiscountPercent').innerText = inv.discountPercent + '%';
+      document.getElementById('printNetAfterDiscount').innerText = formatNumber(inv.amountAfterDiscount);
+      document.getElementById('printReturnsTotal').innerText = formatNumber(calcs.returnsSum);
+      document.getElementById('printBonusTotal').innerText = formatNumber(calcs.bonusSum);
+      document.getElementById('printOtherTotal').innerText = (calcs.otherNet >= 0 ? '+' : '') + formatNumber(calcs.otherNet);
+      document.getElementById('printPaymentsTotal').innerText = formatNumber(calcs.paymentsSum);
+      document.getElementById('printRemainingTotal').innerText = formatNumber(calcs.remaining) + ' د.ع';
+      document.getElementById('printTimestamp').innerText = new Date().toLocaleString('ar-EG');
+
+      fillPrintDetails(inv, calcs);
+
+      window.print();
+    }
+
+    function escHtml(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function fillPrintDetails(inv, calcs) {
+      const td = 'class="border border-slate-300 p-1.5"';
+      const tdB = 'class="border border-slate-300 p-1.5 font-bold"';
+      const emptyRow = (cols) => `<tr><td ${td} colspan="${cols}" style="text-align:center;color:#64748b">لا توجد سجلات</td></tr>`;
+      const totalRow = (label, span, value) => `<tr class="bg-slate-100"><td ${tdB} colspan="${span}">${label}</td><td ${tdB} colspan="2">${value}</td></tr>`;
+
+      // Summary
+      const original = parseFloat(inv.originalAmount) || 0;
+      const afterDisc = parseFloat(inv.amountAfterDiscount) || 0;
+      document.getElementById('printSumOriginal').innerText = formatNumber(original);
+      document.getElementById('printSumDiscountPct').innerText = '(' + (inv.discountPercent || 0) + '%)';
+      document.getElementById('printSumDiscountVal').innerText = formatNumber(original - afterDisc);
+      document.getElementById('printSumAfterDiscount').innerText = formatNumber(afterDisc);
+      document.getElementById('printNetInvoice').innerText = formatNumber(calcs.netInvoice);
+
+      // Returns
+      const rets = inv.returns || [];
+      let html = '';
+      rets.forEach((r, i) => {
+        const net = (parseFloat(r.amount) || 0) * (1 - (parseFloat(r.discount) || 0) / 100);
+        html += `<tr><td ${td}>${i + 1}</td><td ${td}>${escHtml(r.item)}</td><td ${td}>${escHtml(r.qty)}</td><td ${td}>${formatNumber(r.amount)}</td><td ${td}>${escHtml(r.discount)}%</td><td ${tdB}>${formatNumber(net)}</td><td ${td}>${escHtml(r.date)}</td></tr>`;
+      });
+      if (rets.length) html += `<tr class="bg-slate-100"><td ${tdB} colspan="5">إجمالي المردودات</td><td ${tdB} colspan="2">${formatNumber(calcs.returnsSum)}</td></tr>`;
+      document.getElementById('printReturnsBody').innerHTML = html || emptyRow(7);
+
+      // Bonus
+      const bons = inv.bonuses || [];
+      html = '';
+      bons.forEach((b, i) => {
+        const net = (parseFloat(b.amount) || 0) * (1 - (parseFloat(b.discount) || 0) / 100);
+        html += `<tr><td ${td}>${i + 1}</td><td ${td}>${escHtml(b.pharmacy)}</td><td ${td}>${formatNumber(b.amount)}</td><td ${td}>${escHtml(b.discount)}%</td><td ${tdB}>${formatNumber(net)}</td><td ${td}>${escHtml(b.date)}</td></tr>`;
+      });
+      if (bons.length) html += `<tr class="bg-slate-100"><td ${tdB} colspan="4">إجمالي البونص</td><td ${tdB} colspan="2">${formatNumber(calcs.bonusSum)}</td></tr>`;
+      document.getElementById('printBonusBody').innerHTML = html || emptyRow(6);
+
+      // Other amounts
+      const oths = inv.otherAmounts || [];
+      html = '';
+      oths.forEach((o, i) => {
+        const isAdd = o.type === 'add';
+        html += `<tr><td ${td}>${i + 1}</td><td ${td}>${escHtml(o.description)}</td><td ${td}>${isAdd ? '(+) إضافة / تحميل' : '(-) خصم / تنزيل'}</td><td ${tdB}>${isAdd ? '+' : '-'}${formatNumber(o.amount)}</td><td ${td}>${escHtml(o.date)}</td></tr>`;
+      });
+      if (oths.length) html += `<tr class="bg-slate-100"><td ${tdB} colspan="3">الصافي</td><td ${tdB} colspan="2">${(calcs.otherNet >= 0 ? '+' : '-') + formatNumber(Math.abs(calcs.otherNet))}</td></tr>`;
+      document.getElementById('printOtherBody').innerHTML = html || emptyRow(5);
+
+      // Payments
+      const pays = inv.payments || [];
+      html = '';
+      pays.forEach((p, i) => {
+        html += `<tr><td ${td}>${i + 1}</td><td ${td}>${escHtml(p.date)}</td><td ${tdB}>${formatNumber(p.amount)}</td></tr>`;
+      });
+      if (pays.length) html += `<tr class="bg-slate-100"><td ${tdB} colspan="2">إجمالي المحوّل</td><td ${tdB}>${formatNumber(calcs.paymentsSum)}</td></tr>`;
+      document.getElementById('printPaymentsBody').innerHTML = html || emptyRow(3);
+    }
+
+    // Backup & Restore
+    function exportData() {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(invoices, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `invoices_backup_${new Date().toISOString().split('T')[0]}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    }
+
+    function importData(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        try {
+          const imported = JSON.parse(e.target.result);
+          if (Array.isArray(imported)) {
+            invoices = imported;
+            saveToStorage();
+            renderInvoices();
+            alert('تم استيراد البيانات بنجاح!');
+          }
+        } catch (err) {
+          alert('الملف غير صالح، يرجى التأكد من اختيار ملف JSON صحيح');
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    // Init
+    window.addEventListener('DOMContentLoaded', () => {
+      renderInvoices();
+    });
+  </script>
+
+  <!-- PWA: install & service worker -->
+  <script>
+    let deferredInstallPrompt = null;
+    const installBtn = document.getElementById('installBtn');
+    const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
+    if (!isStandalone()) installBtn.classList.remove('hidden'), installBtn.classList.add('flex');
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredInstallPrompt = e;
+    });
+
+    window.addEventListener('appinstalled', () => {
+      deferredInstallPrompt = null;
+      installBtn.classList.add('hidden');
+      installBtn.classList.remove('flex');
+    });
+
+    async function installApp() {
+      if (deferredInstallPrompt) {
+        deferredInstallPrompt.prompt();
+        await deferredInstallPrompt.userChoice;
+        deferredInstallPrompt = null;
+        return;
+      }
+      const ua = navigator.userAgent;
+      if (/iphone|ipad|ipod/i.test(ua)) {
+        alert('للتثبيت على الآيفون/الآيباد:\nافتح الصفحة في Safari ← اضغط زر المشاركة ← "إضافة إلى الشاشة الرئيسية".');
+      } else if (location.protocol === 'file:') {
+        alert('التثبيت يتطلب فتح التطبيق عبر رابط https (مثل GitHub Pages) وليس كملف محلي.');
+      } else {
+        alert('إذا لم تظهر نافذة التثبيت: افتح قائمة المتصفح (⋮) واختر "تثبيت التطبيق" أو "إضافة إلى الشاشة الرئيسية".');
+      }
+    }
+
+    if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => { }));
+    }
+  </script>
+</body>
+
+</html>
